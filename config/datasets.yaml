@@ -1,0 +1,414 @@
+# ============================================================================
+# Boston Open Data - Dataset Configuration
+# ============================================================================
+# This file defines all the datasets we'll be fetching from Boston's Open Data Portal
+# Each dataset has metadata about where to fetch it, how to clean it, and how to store it
+
+# Dataset Structure:
+# - id: Unique identifier for the dataset
+# - name: Human-readable name
+# - source: Where to fetch the data from
+# - resource_id: Boston Open Data API resource identifier
+# - description: What this dataset contains
+# - update_frequency: How often Boston updates this data
+# - primary_key: Unique identifier column(s)
+# - columns: Column definitions with types and descriptions
+
+datasets:
+  # ==========================================================================
+  # 1. Crime Incident Reports
+  # ==========================================================================
+  crime_incidents:
+    id: crime_incidents
+    name: Crime Incident Reports
+    source: boston_open_data
+    resource_id: b973d8cb-eeb2-4e7e-99da-c92938efc9c0
+    description: |
+      Crime incident reports from Boston Police Department.
+      Updated daily. Includes offense type, location, date/time.
+    update_frequency: daily
+    api_endpoint: datastore_search
+    table_name: crime_incidents
+    primary_key: incident_number
+    
+    # Columns to fetch and their mappings
+    columns:
+      incident_number:
+        type: string
+        source_name: INCIDENT_NUMBER
+        description: Unique incident identifier
+        
+      offense_code:
+        type: integer
+        source_name: OFFENSE_CODE
+        description: Numeric offense code
+        
+      offense_code_group:
+        type: string
+        source_name: OFFENSE_CODE_GROUP
+        description: General category of offense
+        
+      offense_description:
+        type: string
+        source_name: OFFENSE_DESCRIPTION
+        description: Detailed offense description
+        
+      district:
+        type: string
+        source_name: DISTRICT
+        description: Police district
+        
+      reporting_area:
+        type: string
+        source_name: REPORTING_AREA
+        description: Reporting area code
+        
+      shooting:
+        type: boolean
+        source_name: SHOOTING
+        description: Whether incident involved shooting
+        
+      occurred_on_date:
+        type: datetime
+        source_name: OCCURRED_ON_DATE
+        description: Date and time of incident
+        
+      year:
+        type: integer
+        source_name: YEAR
+        description: Year of incident
+        
+      month:
+        type: integer
+        source_name: MONTH
+        description: Month of incident
+        
+      day_of_week:
+        type: string
+        source_name: DAY_OF_WEEK
+        description: Day of week
+        
+      hour:
+        type: integer
+        source_name: HOUR
+        description: Hour of day (0-23)
+        
+      street:
+        type: string
+        source_name: STREET
+        description: Street name
+        
+      latitude:
+        type: float
+        source_name: Lat
+        description: Latitude coordinate
+        
+      longitude:
+        type: float
+        source_name: Long
+        description: Longitude coordinate
+        
+      location:
+        type: point
+        description: PostGIS point geometry (created from lat/lon)
+
+  # ==========================================================================
+  # 2. 311 Service Requests
+  # ==========================================================================
+  service_requests:
+    id: service_requests
+    name: 311 Service Requests
+    source: boston_open_data
+    resource_id: 254adca6-64ab-4c5c-9fc0-a6da622be185
+    description: |
+      311 non-emergency service requests including sanitation, 
+      pest control, street maintenance, and public complaints.
+    update_frequency: daily
+    api_endpoint: datastore_search
+    table_name: service_requests
+    primary_key: case_enquiry_id
+    
+    columns:
+      case_enquiry_id:
+        type: string
+        source_name: case_enquiry_id
+        description: Unique case identifier
+        
+      open_dt:
+        type: datetime
+        source_name: open_dt
+        description: Date/time case was opened
+        
+      target_dt:
+        type: datetime
+        source_name: target_dt
+        description: Target resolution date
+        
+      closed_dt:
+        type: datetime
+        source_name: closed_dt
+        description: Date/time case was closed
+        
+      case_status:
+        type: string
+        source_name: case_status
+        description: Status (Open, Closed, etc.)
+        
+      case_title:
+        type: string
+        source_name: case_title
+        description: Brief description/category
+        
+      subject:
+        type: string
+        source_name: subject
+        description: Detailed subject
+        
+      reason:
+        type: string
+        source_name: reason
+        description: Reason for request
+        
+      type:
+        type: string
+        source_name: type
+        description: Request type
+        
+      department:
+        type: string
+        source_name: department
+        description: Responsible department
+        
+      submittedphoto:
+        type: string
+        source_name: submittedphoto
+        description: Photo URL if submitted
+        
+      closedphoto:
+        type: string
+        source_name: closedphoto
+        description: Photo URL when closed
+        
+      latitude:
+        type: float
+        source_name: latitude
+        description: Latitude coordinate
+        
+      longitude:
+        type: float
+        source_name: longitude
+        description: Longitude coordinate
+        
+      location:
+        type: point
+        description: PostGIS point geometry
+        
+      ward:
+        type: string
+        source_name: ward
+        description: Ward number
+        
+      neighborhood:
+        type: string
+        source_name: neighborhood
+        description: Neighborhood name
+        
+      address:
+        type: string
+        source_name: location_street_name
+        description: Street address
+        
+      zipcode:
+        type: string
+        source_name: location_zipcode
+        description: ZIP code
+
+  # ==========================================================================
+  # 3. Building Violations
+  # ==========================================================================
+  building_violations:
+    id: building_violations
+    name: Building Violations
+    source: boston_open_data
+    resource_id: 800a2663-1d6a-46e7-9356-bedb70f5332c
+    description: |
+      Code enforcement violations for buildings in Boston.
+      Includes maintenance violations, unsafe conditions, etc.
+    update_frequency: weekly
+    api_endpoint: datastore_search
+    table_name: building_violations
+    primary_key: case_no
+    
+    columns:
+      case_no:
+        type: string
+        source_name: case_no
+        description: Unique case number
+        
+      status:
+        type: string
+        source_name: status
+        description: Violation status
+        
+      status_dttm:
+        type: datetime
+        source_name: status_dttm
+        description: Status change date/time
+        
+      code:
+        type: string
+        source_name: code
+        description: Violation code
+        
+      description:
+        type: string
+        source_name: description
+        description: Violation description
+        
+      ward:
+        type: string
+        source_name: ward
+        description: Ward number
+        
+      address:
+        type: string
+        source_name: address
+        description: Property address
+        
+      sam_id:
+        type: string
+        source_name: sam_id
+        description: Property identifier
+        
+      value:
+        type: float
+        source_name: value
+        description: Assessed value
+        
+      latitude:
+        type: float
+        source_name: latitude
+        description: Latitude coordinate
+        
+      longitude:
+        type: float
+        source_name: longitude
+        description: Longitude coordinate
+        
+      location:
+        type: point
+        description: PostGIS point geometry
+
+  # ==========================================================================
+  # 4. Food Establishment Inspections
+  # ==========================================================================
+  food_inspections:
+    id: food_inspections
+    name: Food Establishment Inspections
+    source: boston_open_data
+    resource_id: 4582bec6-2b4f-4f9e-bc55-cbaa73117f4c
+    description: |
+      Health inspections of food establishments.
+      Includes violations, scores, and hygiene ratings.
+    update_frequency: weekly
+    api_endpoint: datastore_search
+    table_name: food_inspections
+    primary_key: _id
+    
+    columns:
+      _id:
+        type: integer
+        source_name: _id
+        description: Unique record ID
+        
+      businessname:
+        type: string
+        source_name: businessName
+        description: Name of establishment
+        
+      licenseno:
+        type: string
+        source_name: licenseNo
+        description: License number
+        
+      violstatus:
+        type: string
+        source_name: violStatus
+        description: Violation status
+        
+      violdesc:
+        type: string
+        source_name: violDesc
+        description: Violation description
+        
+      viollevel:
+        type: string
+        source_name: violLevel
+        description: Severity level
+        
+      statusdate:
+        type: date
+        source_name: StatusDate
+        description: Inspection date
+        
+      address:
+        type: string
+        source_name: Address
+        description: Street address
+        
+      city:
+        type: string
+        source_name: CITY
+        description: City name
+        
+      state:
+        type: string
+        source_name: STATE
+        description: State code
+        
+      zip:
+        type: string
+        source_name: ZIP
+        description: ZIP code
+        
+      latitude:
+        type: float
+        source_name: Location
+        description: Latitude (from Location field)
+        
+      longitude:
+        type: float
+        source_name: Location
+        description: Longitude (from Location field)
+        
+      location:
+        type: point
+        description: PostGIS point geometry
+
+# ==========================================================================
+# API Rate Limiting Configuration
+# ==========================================================================
+rate_limits:
+  requests_per_minute: 60
+  requests_per_hour: 1000
+  retry_attempts: 3
+  retry_delay_seconds: 5
+
+# ==========================================================================
+# Data Quality Configuration
+# ==========================================================================
+data_quality:
+  # Drop records with missing critical fields
+  required_fields:
+    crime_incidents: [incident_number, occurred_on_date]
+    service_requests: [case_enquiry_id, open_dt]
+    building_violations: [case_no]
+    food_inspections: [_id, businessname]
+  
+  # Geographic bounds for Boston (to filter out invalid coordinates)
+  geographic_bounds:
+    min_latitude: 42.22
+    max_latitude: 42.42
+    min_longitude: -71.19
+    max_longitude: -70.99
+

@@ -1,0 +1,237 @@
+"""
+311 Service Requests Dataset Connector
+
+Fetches and processes Boston 311 non-emergency service requests.
+Updated daily from Boston Open Data Portal.
+
+Dataset: 311 Service Requests
+Source: https://data.boston.gov/dataset/311-service-requests
+"""
+
+import logging
+from typing import Optional
+import pandas as pd
+
+from datasets.base import BaseDatasetConnector, validate_boston_coordinates
+from db.models import ServiceRequest
+
+logger = logging.getLogger(__name__)
+
+
+class ServiceRequestsConnector(BaseDatasetConnector):
+    """
+    Connector for Boston 311 service request data.
+    
+    Handles fetching, cleaning, and loading 311 service requests.
+    """
+    
+    # Boston Open Data resource ID for 311 service requests
+    RESOURCE_ID = "254adca6-64ab-4c5c-9fc0-a6da622be185"
+    
+    def __init__(self):
+        super().__init__(
+            resource_id=self.RESOURCE_ID,
+            table_name="service_requests"
+        )
+    
+    def fetch_recent(
+        self, 
+        limit: int = 500,
+        clean: bool = True
+    ) -> pd.DataFrame:
+        """
+        Fetch most recent 311 service requests sorted by open date.
+        
+        Args:
+            limit: Number of recent records to fetch
+            clean: Whether to clean the data
+            
+        Returns:
+            DataFrame with recent service requests
+        """
+        logger.info(f"Fetching {limit} most recent service requests...")
+        
+        # Use SQL sort to get truly recent requests
+        df = self.fetch_data(
+            limit=limit,
+            sort_field="open_date",
+            sort_order="DESC"
+        )
+        
+        if clean and not df.empty:
+            df = self.clean_data(df)
+        
+        return df
+    
+    def get_model(self):
+        """Return the ServiceRequest SQLAlchemy model."""
+        return ServiceRequest
+    
+    def clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Clean and transform 311 service request data.
+        
+        Args:
+            df: Raw pandas DataFrame from API
+            
+        Returns:
+            Cleaned pandas DataFrame ready for database
+        """
+        logger.info(f"Cleaning {len(df)} service request records...")
+        
+        df = df.copy()
+        
+        # =====================================================================
+        # Column Mapping
+        # =====================================================================
+        column_mapping = {
+            'case_id': 'case_enquiry_id',  # API uses case_id, DB uses case_enquiry_id
+            'open_date': 'open_dt',
+            'target_close_date': 'target_dt',
+            'close_date': 'closed_dt',
+            'case_status': 'case_status',
+            'case_topic': 'case_title',  # API uses case_topic
+            'service_name': 'subject',  # API uses service_name
+            'closure_reason': 'reason',  # API uses closure_reason
+            'assigned_department': 'department',  # API uses assigned_department
+            'submitted_photo': 'submittedphoto',  # API uses submitted_photo
+            'closed_photo': 'closedphoto',  # API uses closed_photo
+            'latitude': 'latitude',
+            'longitude': 'longitude',
+            'ward': 'ward',
+            'neighborhood': 'neighborhood',
+            'full_address': 'address',  # API uses full_address
+            'zip_code': 'zipcode',  # API uses zip_code
+        }
+        
+        # Also map case_topic to type field
+        if 'case_topic' in df.columns:
+            df['type'] = df['case_topic']
+        
+        existing_cols = {k: v for k, v in column_mapping.items() if k in df.columns}
+        df = df.rename(columns=existing_cols)
+        
+        # =====================================================================
+        # Data Type Conversions
+        # =====================================================================
+        
+        # Convert datetime columns
+        datetime_cols = ['open_dt', 'target_dt', 'closed_dt']
+        for col in datetime_cols:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors='coerce')
+        
+        # Convert numeric columns
+        if 'latitude' in df.columns:
+            df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
+        if 'longitude' in df.columns:
+            df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
+        
+        # =====================================================================
+        # Data Validation
+        # =====================================================================
+        
+        initial_count = len(df)
+        
+        # Drop records without case ID
+        if 'case_enquiry_id' in df.columns:
+            df = df[df['case_enquiry_id'].notna()]
+            logger.info(
+                f"Removed {initial_count - len(df)} records without case_enquiry_id"
+            )
+        
+        # Drop records without open date
+        if 'open_dt' in df.columns:
+            pre_filter = len(df)
+            df = df[df['open_dt'].notna()]
+            if pre_filter != len(df):
+                logger.info(
+                    f"Removed {pre_filter - len(df)} records with invalid open_dt"
+                )
+        
+        # Validate coordinates (but don't drop - some requests may not have location)
+        if 'latitude' in df.columns and 'longitude' in df.columns:
+            valid_coords = df.apply(
+                lambda row: (
+                    pd.notna(row['latitude']) and 
+                    pd.notna(row['longitude']) and
+                    validate_boston_coordinates(row['latitude'], row['longitude'])
+                ),
+                axis=1
+            )
+            invalid_count = (~valid_coords).sum()
+            if invalid_count > 0:
+                logger.info(
+                    f"Found {invalid_count} records with missing/invalid coordinates (keeping them)"
+                )
+        
+        # =====================================================================
+        # Create PostGIS Geography Points
+        # =====================================================================
+        
+        if 'latitude' in df.columns and 'longitude' in df.columns:
+            df['location'] = df.apply(
+                lambda row: self.create_geography_point(
+                    row['latitude'], 
+                    row['longitude']
+                ) if pd.notna(row['latitude']) and pd.notna(row['longitude']) else None,
+                axis=1
+            )
+        
+        # =====================================================================
+        # Add Metadata
+        # =====================================================================
+        
+        from datetime import datetime, timezone
+        current_time = datetime.now(timezone.utc)
+        
+        if 'created_at' not in df.columns:
+            df['created_at'] = current_time
+        if 'updated_at' not in df.columns:
+            df['updated_at'] = current_time
+        
+        # =====================================================================
+        # Select Columns
+        # =====================================================================
+        
+        model = self.get_model()
+        db_columns = [c.name for c in model.__table__.columns]
+        final_columns = [col for col in db_columns if col in df.columns]
+        df = df[final_columns]
+        
+        logger.info(f"Cleaned data: {len(df)} valid records")
+        
+        return df
+
+
+# Convenience instance
+service_requests_connector = ServiceRequestsConnector()
+
+
+if __name__ == "__main__":
+    import logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    connector = ServiceRequestsConnector()
+    
+    print("\n" + "="*70)
+    print("Testing 311 Service Requests Connector")
+    print("="*70)
+    
+    print("\n📥 Fetching 50 records...")
+    df = connector.fetch_data(limit=50)
+    print(f"✅ Fetched {len(df)} records")
+    
+    print("\n🧹 Cleaning data...")
+    df_clean = connector.clean_data(df)
+    print(f"✅ Cleaned {len(df_clean)} records")
+    
+    if not df_clean.empty:
+        print("\n📊 Sample data:")
+        print(df_clean[['case_enquiry_id', 'case_title', 'case_status', 'open_dt']].head())
+    
+    print("\n" + "="*70)
+

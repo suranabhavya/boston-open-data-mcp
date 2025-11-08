@@ -1,0 +1,32 @@
+# Web Framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.6
+pydantic-settings==2.7.1
+
+# Database - Using psycopg (not psycopg2-binary) for Python 3.13 compatibility
+psycopg[binary]==3.2.3
+sqlalchemy==2.0.36
+alembic==1.14.0
+
+# Geographic Operations
+geoalchemy2==0.18.0
+shapely==2.0.6
+
+# Data Processing
+pandas==2.2.3
+numpy==2.2.3
+
+# HTTP Clients
+httpx==0.28.1
+requests==2.32.3
+
+# Environment & Config
+python-dotenv==1.0.1
+pyyaml==6.0.2
+
+# Date/Time
+python-dateutil==2.9.0.post0
+
+# Utilities
+tenacity==9.0.0  # Retry logic for API calls
