@@ -21,18 +21,32 @@ logger = logging.getLogger(__name__)
 class ServiceRequestsConnector(BaseDatasetConnector):
     """
     Connector for Boston 311 service request data.
-    
-    Handles fetching, cleaning, and loading 311 service requests.
+
+    Handles fetching, cleaning, and loading 311 service requests from both:
+    - NEW system (2024+): 254adca6-64ab-4c5c-9fc0-a6da622be185
+    - OLD system (pre-2024): 9d7c2214-4709-478a-a2e8-fb2020a5bb94
     """
-    
-    # Boston Open Data resource ID for 311 service requests
-    RESOURCE_ID = "254adca6-64ab-4c5c-9fc0-a6da622be185"
-    
-    def __init__(self):
+
+    # Boston Open Data resource IDs
+    NEW_RESOURCE_ID = "254adca6-64ab-4c5c-9fc0-a6da622be185"  # New system
+    OLD_RESOURCE_ID = "9d7c2214-4709-478a-a2e8-fb2020a5bb94"  # Old system (legacy)
+
+    # Default to new system for backwards compatibility
+    RESOURCE_ID = NEW_RESOURCE_ID
+
+    def __init__(self, use_old_system: bool = False):
+        """
+        Initialize the connector.
+
+        Args:
+            use_old_system: If True, use the old system resource ID
+        """
+        resource_id = self.OLD_RESOURCE_ID if use_old_system else self.NEW_RESOURCE_ID
         super().__init__(
-            resource_id=self.RESOURCE_ID,
+            resource_id=resource_id,
             table_name="service_requests"
         )
+        self.use_old_system = use_old_system
     
     def fetch_recent(
         self, 
@@ -69,48 +83,90 @@ class ServiceRequestsConnector(BaseDatasetConnector):
     
     def clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Clean and transform 311 service request data.
-        
+        Clean and transform 311 service request data from both old and new systems.
+
         Args:
             df: Raw pandas DataFrame from API
-            
+
         Returns:
             Cleaned pandas DataFrame ready for database
         """
         logger.info(f"Cleaning {len(df)} service request records...")
-        
+        logger.info(f"System: {'OLD (pre-2024)' if self.use_old_system else 'NEW (2024+)'}")
+
         df = df.copy()
-        
+
         # =====================================================================
-        # Column Mapping
+        # Column Mapping (different for old vs new system)
         # =====================================================================
-        column_mapping = {
-            'case_id': 'case_enquiry_id',  # API uses case_id, DB uses case_enquiry_id
-            'open_date': 'open_dt',
-            'target_close_date': 'target_dt',
-            'close_date': 'closed_dt',
-            'case_status': 'case_status',
-            'case_topic': 'case_title',  # API uses case_topic
-            'service_name': 'subject',  # API uses service_name
-            'closure_reason': 'reason',  # API uses closure_reason
-            'assigned_department': 'department',  # API uses assigned_department
-            'submitted_photo': 'submittedphoto',  # API uses submitted_photo
-            'closed_photo': 'closedphoto',  # API uses closed_photo
-            'latitude': 'latitude',
-            'longitude': 'longitude',
-            'ward': 'ward',
-            'neighborhood': 'neighborhood',
-            'full_address': 'address',  # API uses full_address
-            'zip_code': 'zipcode',  # API uses zip_code
-        }
-        
-        # Also map case_topic to type field
+        if self.use_old_system:
+            # OLD system field mapping
+            column_mapping = {
+                'case_enquiry_id': 'case_enquiry_id',  # Already correct
+                'open_dt': 'open_dt',                   # Already correct
+                'sla_target_dt': 'target_dt',           # Map to target_dt
+                'closed_dt': 'closed_dt',               # Already correct
+                'case_title': 'case_title',             # Already correct (also map to type)
+                'subject': 'subject',                   # Already correct
+                'reason': 'reason',                     # Already correct
+                'type': 'type',                         # Already correct
+                'department': 'department',             # Already correct
+                'location': 'address',                  # Full address
+                'location_street_name': 'street_name_old',  # Backup if location missing
+                'location_zipcode': 'zipcode',          # Zip code
+                'latitude': 'latitude',
+                'longitude': 'longitude',
+                'ward': 'ward',
+                'neighborhood': 'neighborhood',
+                'submitted_photo': 'submittedphoto',
+                'closed_photo': 'closedphoto',
+                'case_status': 'case_status',
+                'closure_reason': 'closure_reason_old',  # Keep for merging
+            }
+        else:
+            # NEW system field mapping
+            column_mapping = {
+                'case_id': 'case_enquiry_id',      # API uses case_id, DB uses case_enquiry_id
+                'open_date': 'open_dt',
+                'target_close_date': 'target_dt',
+                'close_date': 'closed_dt',
+                'case_status': 'case_status',
+                'case_topic': 'case_title',        # API uses case_topic
+                'service_name': 'subject',         # API uses service_name
+                'closure_reason': 'reason',        # API uses closure_reason
+                'assigned_department': 'department',  # API uses assigned_department
+                'submitted_photo': 'submittedphoto',  # API uses submitted_photo
+                'closed_photo': 'closedphoto',     # API uses closed_photo
+                'latitude': 'latitude',
+                'longitude': 'longitude',
+                'ward': 'ward',
+                'neighborhood': 'neighborhood',
+                'full_address': 'address',  # API uses full_address
+                'zip_code': 'zipcode',  # API uses zip_code
+            }
+
+        # Also map case_topic/case_title to type field for consistency
         if 'case_topic' in df.columns:
             df['type'] = df['case_topic']
-        
+        elif 'case_title' in df.columns and 'type' not in df.columns:
+            # For old system, use case_title as type if type doesn't exist
+            df['type'] = df['case_title']
+
         existing_cols = {k: v for k, v in column_mapping.items() if k in df.columns}
         df = df.rename(columns=existing_cols)
-        
+
+        # =====================================================================
+        # Old System: Merge closure_reason_old into reason if reason is empty
+        # =====================================================================
+        if self.use_old_system and 'closure_reason_old' in df.columns:
+            if 'reason' not in df.columns:
+                df['reason'] = df['closure_reason_old']
+            else:
+                # Merge: use reason if it exists, otherwise use closure_reason_old
+                df['reason'] = df['reason'].fillna(df['closure_reason_old'])
+            # Drop the temporary column
+            df = df.drop(columns=['closure_reason_old'])
+
         # =====================================================================
         # Data Type Conversions
         # =====================================================================
@@ -204,8 +260,9 @@ class ServiceRequestsConnector(BaseDatasetConnector):
         return df
 
 
-# Convenience instance
-service_requests_connector = ServiceRequestsConnector()
+# Convenience instances
+service_requests_connector = ServiceRequestsConnector()  # NEW system (default)
+service_requests_connector_old = ServiceRequestsConnector(use_old_system=True)  # OLD system (legacy)
 
 
 if __name__ == "__main__":

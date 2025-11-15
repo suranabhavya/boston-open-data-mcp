@@ -30,3 +30,6 @@ python-dateutil==2.9.0.post0
 
 # Utilities
 tenacity==9.0.0  # Retry logic for API calls
+
+# MCP Protocol (for LLM integration)
+mcp>=0.9.0  # Model Context Protocol for Claude integration

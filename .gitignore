@@ -1,3 +1,12 @@
+# ============================================================================
+# Python
+# ============================================================================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
 # pyenv
 .python-version
 
@@ -12,6 +21,27 @@ poetry.lock
 
 # PEP 582
 __pypackages__/
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
 
 # ============================================================================
@@ -60,7 +90,6 @@ data/test/*
 
 # CSV, JSON, Parquet files
 *.csv
-*.json
 *.parquet
 *.feather
 
@@ -74,6 +103,30 @@ data/test/*
 *.sql
 *.db
 *.sqlite
+
+# ============================================================================
+# MCP Specific
+# ============================================================================
+# MCP config files with secrets
+cursor_mcp_config.json
+*.mcp.json
+
+# Temporary markdown files (documentation drafts)
+*_TEMP.md
+*_DRAFT.md
+CAPABILITIES_SUMMARY.md
+MCP_IMPLEMENTATION_SUMMARY.md
+MCP_COMPARISON_SUMMARY.md
+COMPARISON_*.md
+DEVELOPER_USE_CASES.md
+INTEGRATION_EXAMPLES.md
+CURSOR_SETUP_GUIDE.md
+QUICK_REFERENCE.md
+QUICK_START.md
+
+# Keep important docs
+!README.md
+!CONTRIBUTING.md
 
 # ============================================================================
 # Logs and Monitoring
